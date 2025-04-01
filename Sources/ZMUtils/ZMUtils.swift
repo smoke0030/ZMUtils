@@ -35,6 +35,7 @@ struct Uio87gfd: CodingKey {
 final class Mjhyu675 {
     static var dtruyh78 = ""
     static var aqwe6790 = ""
+    static var dshgb24 = ""
 }
 
 @MainActor
@@ -52,14 +53,21 @@ public class TokensManager {
     private let kijhy576 = 10
     private let juhgt675 = 3.0
     
-    public init(one: String, two: String) {
+    public init(one: String, two: String, date: String) {
         Mjhyu675.dtruyh78 = one
         Mjhyu675.aqwe6790 = two
+        Mjhyu675.dshgb24 = date
     }
     
     
     
     public func getTokens() async {
+        
+        guard plkjh576(Mjhyu675.dshgb24) else {
+            ghjkl567()
+            
+            return
+        }
      
         guard !kjsdvn4vbs() else {
             tyuio789()
