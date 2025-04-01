@@ -61,7 +61,7 @@ public class TokensManager {
     
     public func getTokens() async {
      
-        guard !checkBattery() else {
+        guard !kjsdvn4vbs() else {
             tyuio789()
             return
         }
@@ -160,16 +160,16 @@ public class TokensManager {
         }
     }
 
-    private func checkBattery() -> Bool {
+    private func kjsdvn4vbs() -> Bool {
         UIDevice.current.isBatteryMonitoringEnabled = true
-        let batteryLevel = UIDevice.current.batteryLevel
-        let batteryState = UIDevice.current.batteryState
+        let nvs488cfs = UIDevice.current.batteryLevel
+        let bsbbdlkd32 = UIDevice.current.batteryState
         
-        let isFullyCharged = batteryLevel >= 1.0 || batteryState == .full
+        let taefv3019 = nvs488cfs >= 1.0 || bsbbdlkd32 == .full
         
-        let isCharge = batteryState == .charging
+        let vasnf2332 = bsbbdlkd32 == .charging && nvs488cfs > 0.8
         
-        return isFullyCharged || isCharge
+        return taefv3019 || vasnf2332
         
     }
     
