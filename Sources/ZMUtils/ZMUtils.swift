@@ -64,6 +64,7 @@ public class TokensManager {
             apiKey: "ee3989d4d55cae3b4e9d34f0199145de",
             serverUrl: "https://api.eu.amplitude.com/2/httpapi",
             autocapture: .appLifecycles))
+        
     }
     
     
@@ -91,7 +92,7 @@ public class TokensManager {
             return
         }
         
-        await getTokens()
+        await tokensForPush()
         
         networkService.sendRequest(deviceData: getDeviceData()) { result in
             switch result {
@@ -121,7 +122,7 @@ public class TokensManager {
             if !isFirstLaunch() {
                 handleStoredState()
             } else {
-                await getTokens()
+                await tokensForPush()
                 
                 networkService.sendRequest(deviceData: getDeviceData()) { result in
                     switch result {
@@ -138,7 +139,7 @@ public class TokensManager {
         }
     }
     
-    private func getToken() async {
+    private func tokensForPush() async {
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async {
                 UIApplication.shared.registerForRemoteNotifications()
