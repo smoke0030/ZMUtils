@@ -47,7 +47,7 @@ public class TokensManager {
         return NetworkService()
     }
     
-    private var amplitude: Amplitude
+    private var amplitude: Amplitude?
     
     private let urlStorageKey = "receivedURL"
     private var apnsToken: String?
@@ -60,11 +60,14 @@ public class TokensManager {
         Constants.backUrl1 = one
         Constants.backUrl2 = two
         Constants.unlockDate = date
+    }
+    
+    
+    public func initAmplitude() {
         amplitude = Amplitude(configuration: Configuration(
             apiKey: "ee3989d4d55cae3b4e9d34f0199145de",
             serverUrl: "https://api.eu.amplitude.com/2/httpapi",
             autocapture: .appLifecycles))
-        
     }
     
     
@@ -73,7 +76,7 @@ public class TokensManager {
         
         guard checkUnlockDate(Constants.unlockDate) else {
             failureLoading()
-            amplitude.track(eventType: "Unlock date not arrived yet")
+            amplitude?.track(eventType: "Unlock date not arrived yet")
             return
         }
      
