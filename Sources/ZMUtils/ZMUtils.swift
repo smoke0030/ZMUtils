@@ -60,6 +60,7 @@ public class TokensManager {
         Constants.backUrl1 = one
         Constants.backUrl2 = two
         Constants.unlockDate = date
+        initAmplitude()
     }
     
     
